@@ -140,9 +140,33 @@ def _convert_global_max_pool(converter: ONNXConverter, onnx_op: INodeProto):
 
 @ONNXConverter.register_handler("BatchNormalization")
 def _convert_batch_normalization(converter: ONNXConverter, onnx_op: INodeProto):
-    # FIXME: It's possible to support in current version of webdnn
-    raise NotImplementedError("[ONNXConverter] Operator \"BatchNormalization\" is not supported yet.")
+    x = converter.get_variable(onnx_op.input[0])
 
+    gamma = converter.get_variable(onnx_op.input[1])
+    gamma.order.unify(OrderC)
+
+    beta = converter.get_variable(onnx_op.input[2])
+    beta.order.unify(OrderC)
+
+    attrs = attribute_dict(onnx_op)
+    eps = attrs["epsilon"].f
+
+    if len(onnx_op.input) == 5:
+        mean = converter.get_variable(onnx_op.input[3])
+        mean.order.unify(OrderC)
+
+        variance = converter.get_variable(onnx_op.input[4])
+        variance.order.unify(OrderC)
+
+    elif len(onnx_op.input) == 3:
+        mean = 0 if onnx_op.running_mean is None else ConstantVariable(onnx_op.running_mean, OrderC)
+        variance = 1 if onnx_op.running_var is None else ConstantVariable(onnx_op.running_var, OrderC)
+
+    else:
+        raise ValueError("Number of inputs to BatchNormalizationFunction must be 3 or 5.")
+
+    y = (x - mean) / ((variance + eps) ** 0.5) * gamma + beta
+    converter.set_variable(onnx_op.output[0], y)
 
 @ONNXConverter.register_handler("Dropout")
 def _convert_max_pool(converter: ONNXConverter, onnx_op: INodeProto):
